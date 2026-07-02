@@ -14,15 +14,18 @@ function formatAppliances(appliances) {
     .join("\n");
 }
 
-function formatRepairs(repairs) {
-  if (!repairs.length) return "No related past repairs found.";
-  return repairs
-    .map((r) => {
-      const worked =
-        r.worked === true ? "worked" : r.worked === false ? "did not work" : "outcome unknown";
-      return `- "${r.problem}" → diagnosed as ${r.diagnosis}; tried: ${r.fixTried} (${worked}).`;
-    })
-    .join("\n");
+function formatMemory(memory) {
+  if (!memory.recalled.length) return "No related past repairs or patterns found.";
+  const lines = memory.recalled.map((m) => {
+    const w = m.weight.toFixed(2);
+    if (m.kind === "pattern") {
+      return `- [LEARNED PATTERN, weight ${w}, from ${m.sourceCount} past repairs] ${m.insight}`;
+    }
+    const outcome = m.worked === true ? "this WORKED" : m.worked === false ? "this DID NOT work" : "outcome unknown";
+    return `- [past repair, weight ${w}] "${m.problem}" → diagnosed as ${m.diagnosis}; tried: ${m.fixTried} (${outcome}).`;
+  });
+  if (memory.compressedSummary) lines.push(`- [compressed] ${memory.compressedSummary}`);
+  return lines.join("\n");
 }
 
 const SHAPE = `{
@@ -47,14 +50,18 @@ export async function diagnose(userId, messages) {
 THE USER'S HOME:
 ${formatAppliances(memory.appliances)}
 
-RELEVANT PAST REPAIRS (recalled from memory):
-${formatRepairs(memory.relevantRepairs)}
+RELEVANT MEMORY (weighted by outcome, recency, and similarity; token-budgeted):
+${formatMemory(memory)}
+
+HOW TO USE MEMORY:
+- LEARNED PATTERNS are your most reliable knowledge — trust them first.
+- Higher weight = more trustworthy. A fix marked "this WORKED" should be your leading hypothesis for similar problems; a fix marked "this DID NOT work" must NOT be recommended again for the same problem — propose the next most likely cause instead.
+- If you used a memory, reference it explicitly in recalledContext (e.g. "Last time your washer had this, cleaning the drain pump filter fixed it").
 
 RULES:
 - If the problem is too vague to diagnose safely, set needsClarification true and ask up to 3 specific clarifyingQuestions instead of guessing.
 - Otherwise diagnose the most likely cause and give first-fix steps the user can safely attempt themselves.
 - Always weigh DIY vs a professional. Anything involving gas, mains/high-voltage electrical, structural work, or sewage must recommend a pro.
-- If a past repair above is relevant, reference it explicitly in recalledContext and your diagnosis.
 - Never invent details about their appliance you were not told. Be honest about uncertainty.
 
 Respond with ONLY a raw JSON object (no markdown, no code fences) in exactly this shape:
@@ -88,5 +95,5 @@ ${SHAPE}`;
     };
   }
 
-  return { memoryMode: memory.mode, result };
+  return { memoryMode: memory.mode, memoryStats: memory.stats, result };
 }
